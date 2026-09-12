@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -16,16 +17,36 @@ import (
 	"n1h41/fw-oci/internal/tui/theme"
 )
 
+// Focusable fields, cycled with tab/shift+tab.
+const (
+	focusQuery = iota
+	focusFrom
+	focusTo
+)
+
+// maxSearchSpan is the OCI Logging limit on the searchable time range.
+const maxSearchSpan = 180 * 24 * time.Hour
+
+// dateLayout is used to render the default from/to values.
+const dateLayout = "2006-01-02 15:04"
+
+// dateLayouts are accepted when parsing the from/to fields, most specific first.
+var dateLayouts = []string{"2006-01-02 15:04:05", "2006-01-02 15:04", "2006-01-02"}
+
 // Result is the result of an asynchronous search.
 type Result struct {
 	Content string
 	Err     error
 }
 
-// Model renders the search screen: a query textarea plus results viewport.
+// Model renders the search screen: a query textarea, from/to date fields, and
+// a results viewport.
 type Model struct {
 	session   *state.Session
 	query     textarea.Model
+	from      textinput.Model
+	to        textinput.Model
+	focus     int
 	results   viewport.Model
 	searching bool
 	searched  bool
@@ -38,9 +59,23 @@ func New(session *state.Session) Model {
 	q.SetHeight(3)
 	q.ShowLineNumbers = false
 	q.Focus()
+
+	now := time.Now()
+	from := textinput.New()
+	from.Placeholder = "YYYY-MM-DD HH:MM"
+	from.SetValue(now.Add(-24 * time.Hour).Format(dateLayout))
+	from.Width = 20
+
+	to := textinput.New()
+	to.Placeholder = "YYYY-MM-DD HH:MM"
+	to.SetValue(now.Format(dateLayout))
+	to.Width = 20
+
 	return Model{
 		session: session,
 		query:   q,
+		from:    from,
+		to:      to,
 		results: viewport.New(0, 0),
 	}
 }
@@ -50,7 +85,7 @@ func (m Model) Init() tea.Cmd { return nil }
 func (m *Model) Resize(width, contentHeight int) {
 	m.query.SetWidth(width - 4)
 	m.results.Width = width - 4
-	m.results.Height = contentHeight - 5
+	m.results.Height = contentHeight - 7
 }
 
 // Preload overwrites the query with the current selection scope.
@@ -79,35 +114,114 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "tab":
+			m.focus = (m.focus + 1) % 3
+			m.syncFocus()
+			return m, nil
+		case "shift+tab":
+			m.focus = (m.focus + 2) % 3
+			m.syncFocus()
+			return m, nil
 		case "esc":
 			return m, func() tea.Msg { return state.GoUp{} }
 		case "enter":
-			q := strings.TrimSpace(m.query.Value())
-			if q == "" {
-				return m, func() tea.Msg { return Result{Err: fmt.Errorf("query is empty")} }
-			}
-			m.searching = true
-			m.err = nil
-			m.searched = false
-			return m, m.searchCmd(q)
+			return m.submit()
 		}
 	}
 
-	var qc, rc tea.Cmd
-	m.query, qc = m.query.Update(msg)
+	var fc, rc tea.Cmd
+	switch m.focus {
+	case focusFrom:
+		m.from, fc = m.from.Update(msg)
+	case focusTo:
+		m.to, fc = m.to.Update(msg)
+	default:
+		m.query, fc = m.query.Update(msg)
+	}
 	m.results, rc = m.results.Update(msg)
-	return m, tea.Batch(qc, rc)
+	return m, tea.Batch(fc, rc)
 }
 
-func (m Model) searchCmd(q string) tea.Cmd {
+// syncFocus moves input focus to the currently selected field.
+func (m *Model) syncFocus() {
+	if m.focus == focusQuery {
+		m.query.Focus()
+	} else {
+		m.query.Blur()
+	}
+	if m.focus == focusFrom {
+		m.from.Focus()
+	} else {
+		m.from.Blur()
+	}
+	if m.focus == focusTo {
+		m.to.Focus()
+	} else {
+		m.to.Blur()
+	}
+}
+
+// submit validates the query and date range, then launches the search.
+func (m Model) submit() (Model, tea.Cmd) {
+	q := strings.TrimSpace(m.query.Value())
+	if q == "" {
+		m.err = fmt.Errorf("query is empty")
+		return m, nil
+	}
+	from, err := parseDate(m.from.Value(), false)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	to, err := parseDate(m.to.Value(), true)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	if to.Before(from) {
+		m.err = fmt.Errorf("'to' must be after 'from'")
+		return m, nil
+	}
+	if to.Sub(from) > maxSearchSpan {
+		m.err = fmt.Errorf("date range exceeds the OCI limit of 180 days")
+		return m, nil
+	}
+
+	m.searching = true
+	m.err = nil
+	m.searched = false
+	return m, m.searchCmd(q, from, to)
+}
+
+// parseDate accepts the layouts in dateLayouts. When endOfDay is true, a
+// date-only value is expanded to the last instant of that day.
+func parseDate(s string, endOfDay bool) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, fmt.Errorf("date is empty")
+	}
+	for _, layout := range dateLayouts {
+		t, err := time.ParseInLocation(layout, s, time.Local)
+		if err != nil {
+			continue
+		}
+		if endOfDay && layout == "2006-01-02" {
+			t = t.Add(24*time.Hour - time.Nanosecond)
+		}
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("invalid date %q, use YYYY-MM-DD or YYYY-MM-DD HH:MM", s)
+}
+
+func (m Model) searchCmd(q string, from, to time.Time) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		results, err := m.session.Client.SearchLogs(ctx, oci.SearchQuery{
 			Query: q,
-			Start: time.Now().Add(-24 * time.Hour),
-			End:   time.Now(),
+			Start: from,
+			End:   to,
 			Limit: 100,
 		})
 		if err != nil {
@@ -138,5 +252,11 @@ func (m Model) View() string {
 			body = r
 		}
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.query.View(), "", body)
+
+	dates := lipgloss.JoinHorizontal(lipgloss.Left,
+		theme.Help.Render("from: "), m.from.View(),
+		"   ",
+		theme.Help.Render("to: "), m.to.View(),
+	)
+	return lipgloss.JoinVertical(lipgloss.Left, m.query.View(), dates, "", body)
 }
