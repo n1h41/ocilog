@@ -15,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"n1h41/fw-oci/internal/history"
 	"n1h41/fw-oci/internal/oci"
 	"n1h41/fw-oci/internal/tui/state"
 	"n1h41/fw-oci/internal/tui/theme"
@@ -62,6 +63,12 @@ type Model struct {
 	searching bool
 	searched  bool
 	err       error
+
+	width        int
+	history      *history.Store
+	showHistory  bool
+	historyIndex int
+	confirmClear bool
 }
 
 func New(session *state.Session) Model {
@@ -102,15 +109,30 @@ func New(session *state.Session) Model {
 		from:    from,
 		to:      to,
 		results: results,
+		history: history.Load(),
 	}
 }
 
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m *Model) Resize(width, contentHeight int) {
-	m.query.SetWidth(width - 4)
-	m.results.Width = width - 4
+	m.width = width
 	m.results.Height = contentHeight - 7
+	m.applyWidths()
+}
+
+// applyWidths sizes the query and results to the space left of the history
+// sidebar when it is shown.
+func (m *Model) applyWidths() {
+	w := m.width - 4
+	if m.showHistory {
+		w -= m.sidebarWidth() + 2
+	}
+	if w < 20 {
+		w = 20
+	}
+	m.query.SetWidth(w)
+	m.results.Width = w
 }
 
 // Preload overwrites the query with the current selection scope.
@@ -148,7 +170,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		m.status = ""
+		if m.showHistory {
+			return m.updateHistory(msg)
+		}
 		switch msg.String() {
+		case "ctrl+r":
+			m.showHistory = !m.showHistory
+			m.historyIndex = 0
+			m.applyWidths()
+			return m, nil
 		case "ctrl+y":
 			if m.content == "" {
 				m.status = "nothing to copy"
@@ -250,7 +280,75 @@ func (m Model) submit() (Model, tea.Cmd) {
 	m.searching = true
 	m.err = nil
 	m.searched = false
+	if err := m.history.Add(history.Entry{
+		Query: q,
+		From:  strings.TrimSpace(m.from.Value()),
+		To:    strings.TrimSpace(m.to.Value()),
+	}); err != nil {
+		m.status = "history save failed: " + err.Error()
+	}
 	return m, m.searchCmd(q, from, to)
+}
+
+// updateHistory handles keys while the history popup is open.
+func (m Model) updateHistory(msg tea.KeyMsg) (Model, tea.Cmd) {
+	entries := m.history.Entries()
+	key := msg.String()
+	if key != "ctrl+x" {
+		m.confirmClear = false
+	}
+	switch key {
+	case "ctrl+x":
+		if len(entries) == 0 {
+			break
+		}
+		if !m.confirmClear {
+			m.confirmClear = true
+			break
+		}
+		m.confirmClear = false
+		if err := m.history.Clear(); err != nil {
+			m.status = "history clear failed: " + err.Error()
+		} else {
+			m.historyIndex = 0
+			m.status = "history cleared"
+		}
+	case "esc", "ctrl+r":
+		m.showHistory = false
+		m.applyWidths()
+	case "up", "ctrl+p":
+		if m.historyIndex > 0 {
+			m.historyIndex--
+		}
+	case "down", "ctrl+n":
+		if m.historyIndex < len(entries)-1 {
+			m.historyIndex++
+		}
+	case "home":
+		m.historyIndex = 0
+	case "end":
+		if len(entries) > 0 {
+			m.historyIndex = len(entries) - 1
+		}
+	case "enter":
+		if len(entries) > 0 {
+			e := entries[m.historyIndex]
+			m.query.SetValue(e.Query)
+			m.query.CursorEnd()
+			if e.From != "" {
+				m.from.SetValue(e.From)
+			}
+			if e.To != "" {
+				m.to.SetValue(e.To)
+			}
+			m.focus = focusQuery
+			m.syncFocus()
+			m.status = "loaded query from history"
+		}
+		m.showHistory = false
+		m.applyWidths()
+	}
+	return m, nil
 }
 
 // parseDate accepts the layouts in dateLayouts. When endOfDay is true, a
@@ -330,5 +428,14 @@ func (m Model) View() string {
 	if m.status != "" {
 		status = theme.Help.Render(m.status)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.query.View(), dates, status, body)
+	if m.showHistory {
+		body = padLines(body, m.results.Height)
+	}
+	main := lipgloss.JoinVertical(lipgloss.Left, m.query.View(), "\n", dates, status, body)
+
+	if !m.showHistory {
+		return main
+	}
+	sidebar := m.historySidebar(lipgloss.Height(main))
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, "  ", main)
 }

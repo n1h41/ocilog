@@ -20,4 +20,17 @@ var (
 	JSONNumber  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF9E64"))
 	JSONLiteral = lipgloss.NewStyle().Foreground(lipgloss.Color("#BB9AF7"))
 	JSONPunct   = lipgloss.NewStyle().Foreground(lipgloss.Color("#565F89"))
+
+	Sidebar = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7D56F4")).
+		Padding(0, 1)
+
+	SidebarTitle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#7D56F4"))
+
+	Selected = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color("#7D56F4"))
 )
