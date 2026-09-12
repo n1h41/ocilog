@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -41,6 +42,12 @@ type Result struct {
 	Err     error
 }
 
+// copiedMsg reports the outcome of copying to the clipboard.
+type copiedMsg struct {
+	label string
+	err   error
+}
+
 // Model renders the search screen: a query textarea, from/to date fields, and
 // a results viewport.
 type Model struct {
@@ -50,6 +57,8 @@ type Model struct {
 	to        textinput.Model
 	focus     int
 	results   viewport.Model
+	content   string
+	status    string
 	searching bool
 	searched  bool
 	err       error
@@ -124,12 +133,35 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.err = msg.Err
 		if msg.Err == nil {
 			m.searched = true
+			m.content = msg.Content
 			m.results.SetContent(msg.Content)
 		}
 		return m, nil
 
+	case copiedMsg:
+		if msg.err != nil {
+			m.status = "copy failed: " + msg.err.Error()
+		} else {
+			m.status = msg.label + " copied to clipboard"
+		}
+		return m, nil
+
 	case tea.KeyMsg:
+		m.status = ""
 		switch msg.String() {
+		case "ctrl+y":
+			if m.content == "" {
+				m.status = "nothing to copy"
+				return m, nil
+			}
+			return m, copyCmd("results", m.content)
+		case "ctrl+o":
+			q := strings.TrimSpace(m.query.Value())
+			if q == "" {
+				m.status = "nothing to copy"
+				return m, nil
+			}
+			return m, copyCmd("query", q)
 		case "tab":
 			m.focus = (m.focus + 1) % 3
 			m.syncFocus()
@@ -241,6 +273,13 @@ func parseDate(s string, endOfDay bool) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid date %q, use YYYY-MM-DD or YYYY-MM-DD HH:MM", s)
 }
 
+// copyCmd writes content to the system clipboard without blocking the UI.
+func copyCmd(label, content string) tea.Cmd {
+	return func() tea.Msg {
+		return copiedMsg{label: label, err: clipboard.WriteAll(content)}
+	}
+}
+
 func (m Model) searchCmd(q string, from, to time.Time) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -286,5 +325,10 @@ func (m Model) View() string {
 		"   ",
 		theme.Help.Render("to: "), m.to.View(),
 	)
-	return lipgloss.JoinVertical(lipgloss.Left, m.query.View(), dates, "", body)
+
+	status := ""
+	if m.status != "" {
+		status = theme.Help.Render(m.status)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, m.query.View(), dates, status, body)
 }
