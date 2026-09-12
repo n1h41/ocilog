@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,8 +17,8 @@ type SearchQuery struct {
 	Limit int
 }
 
-// SearchLogs runs a query and returns each result rendered as a JSON string.
-func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]string, error) {
+// SearchLogs runs a query and returns each result's raw JSON payload.
+func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]interface{}, error) {
 	if q.Limit <= 0 {
 		q.Limit = 100
 	}
@@ -38,14 +37,13 @@ func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]string, error
 		return nil, fmt.Errorf("search logs: %w", err)
 	}
 
-	out := make([]string, 0, len(resp.Results))
+	out := make([]interface{}, 0, len(resp.Results))
 	for _, r := range resp.Results {
-		b, err := json.MarshalIndent(r.Data, "", "  ")
-		if err != nil {
-			out = append(out, fmt.Sprintf("%v", r.Data))
+		if r.Data == nil {
+			out = append(out, nil)
 			continue
 		}
-		out = append(out, string(b))
+		out = append(out, *r.Data)
 	}
 	return out, nil
 }

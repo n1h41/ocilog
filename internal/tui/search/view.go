@@ -2,10 +2,12 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -71,12 +73,26 @@ func New(session *state.Session) Model {
 	to.SetValue(now.Format(dateLayout))
 	to.Width = 20
 
+	results := viewport.New(0, 0)
+	// Restrict the viewport to non-typing keys so editing the query or dates
+	// never scrolls the results.
+	results.KeyMap = viewport.KeyMap{
+		PageUp:       key.NewBinding(key.WithKeys("pgup")),
+		PageDown:     key.NewBinding(key.WithKeys("pgdown")),
+		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u")),
+		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d")),
+		Up:           key.NewBinding(key.WithKeys("up")),
+		Down:         key.NewBinding(key.WithKeys("down")),
+		Left:         key.NewBinding(key.WithKeys("left")),
+		Right:        key.NewBinding(key.WithKeys("right")),
+	}
+
 	return Model{
 		session: session,
 		query:   q,
 		from:    from,
 		to:      to,
-		results: viewport.New(0, 0),
+		results: results,
 	}
 }
 
@@ -126,6 +142,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, func() tea.Msg { return state.GoUp{} }
 		case "enter":
 			return m.submit()
+		case "pgup":
+			m.results.PageUp()
+			return m, nil
+		case "pgdown":
+			m.results.PageDown()
+			return m, nil
+		case "home":
+			m.results.GotoTop()
+			return m, nil
+		case "end":
+			m.results.GotoBottom()
+			return m, nil
 		}
 	}
 
@@ -228,11 +256,11 @@ func (m Model) searchCmd(q string, from, to time.Time) tea.Cmd {
 			return Result{Err: err}
 		}
 
-		var b strings.Builder
-		for i, r := range results {
-			fmt.Fprintf(&b, "%d. %s\n\n", i+1, r)
+		content, err := json.MarshalIndent(results, "", "  ")
+		if err != nil {
+			return Result{Err: fmt.Errorf("format results: %w", err)}
 		}
-		return Result{Content: b.String()}
+		return Result{Content: string(content)}
 	}
 }
 
