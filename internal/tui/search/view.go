@@ -134,7 +134,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.Err == nil {
 			m.searched = true
 			m.content = msg.Content
-			m.results.SetContent(msg.Content)
+			m.results.SetContent(highlightJSON(msg.Content))
 		}
 		return m, nil
 
