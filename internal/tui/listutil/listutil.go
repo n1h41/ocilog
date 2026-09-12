@@ -11,6 +11,7 @@ import (
 type Item interface {
 	list.Item
 	OCID() string
+	SelectionKey() string
 	WithSelected(bool) list.Item
 }
 
@@ -31,8 +32,9 @@ func ToggleSelection(l *list.Model, s *state.Session) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	sel := !s.IsSelected(it.OCID())
-	s.SetSelected(it.OCID(), sel)
+	key := it.SelectionKey()
+	sel := !s.IsSelected(key)
+	s.SetSelected(key, sel)
 	items[idx] = it.WithSelected(sel)
 	return l.SetItem(idx, items[idx])
 }
