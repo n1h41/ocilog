@@ -50,6 +50,11 @@ type Model struct {
 	selectedCompartmentName string
 	selectedLogGroupID      string
 	selectedLogGroupName    string
+
+	// selected tracks the multi-selected OCIDs across all three lists. It is
+	// the source of truth for the preloaded search scope; list items mirror
+	// it so the delegate can render a selection marker.
+	selected map[string]bool
 }
 
 // New creates the root model bound to an OCI logging client. tenancyID is the
@@ -71,6 +76,7 @@ func New(client *oci.Client, tenancyID, initialCompartment string) *Model {
 	q.Placeholder = "Search query (OCI Logging Query Language)..."
 	q.SetHeight(3)
 	q.ShowLineNumbers = false
+	q.Focus()
 
 	r := viewport.New(0, 0)
 
@@ -89,6 +95,7 @@ func New(client *oci.Client, tenancyID, initialCompartment string) *Model {
 		results:                 r,
 		selectedCompartmentID:   compartment,
 		selectedCompartmentName: compartment,
+		selected:                map[string]bool{},
 	}
 }
 
@@ -118,6 +125,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
+		// On the search tab only navigation keys are intercepted; everything
+		// else (letters, digits, space, ...) reaches the query textarea.
+		if m.tab == tabSearch {
+			switch msg.String() {
+			case "esc":
+				return m, m.up()
+			case "enter":
+				return m, m.down()
+			}
+			break
+		}
+
 		switch msg.String() {
 		case "1":
 			m.tab = tabCompartments
@@ -129,11 +148,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tab = tabLogs
 			return m, nil
 		case "4":
-			m.tab = tabSearch
-			return m, nil
+			return m, m.enterSearch()
 
 		case "tab":
-			m.tab = (m.tab + 1) % 4
+			next := (m.tab + 1) % 4
+			if next == tabSearch {
+				return m, m.enterSearch()
+			}
+			m.tab = next
 			return m, nil
 
 		case "r":
@@ -142,11 +164,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m, m.down()
 
+		case " ":
+			return m, m.toggleSelection()
+
+		case "s":
+			return m, m.preloadSearch()
+
 		case "backspace":
-			// On the search tab, backspace edits the query textarea.
-			if m.tab != tabSearch {
-				return m, m.up()
-			}
+			return m, m.up()
 
 		case "esc":
 			// Let a list clear an applied filter instead of navigating up.
@@ -161,7 +186,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			items := make([]list.Item, 0, len(msg.compartments))
 			for _, c := range msg.compartments {
-				items = append(items, compartmentItem{id: c.ID, name: c.Name, state: c.State})
+				items = append(items, compartmentItem{id: c.ID, name: c.Name, state: c.State, selected: m.selected[c.ID]})
 			}
 			m.compartments.SetItems(items)
 		}
@@ -171,7 +196,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			items := make([]list.Item, 0, len(msg.groups))
 			for _, g := range msg.groups {
-				items = append(items, logGroupItem{id: g.ID, name: g.Name})
+				items = append(items, logGroupItem{id: g.ID, name: g.Name, selected: m.selected[g.ID]})
 			}
 			m.logGroups.SetItems(items)
 		}
@@ -181,7 +206,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			items := make([]list.Item, 0, len(msg.logs))
 			for _, l := range msg.logs {
-				items = append(items, logItem{id: l.ID, name: l.Name, logType: l.LogType, enabled: l.Enabled})
+				items = append(items, logItem{id: l.ID, name: l.Name, logType: l.LogType, enabled: l.Enabled, selected: m.selected[l.ID]})
 			}
 			m.logs.SetItems(items)
 		}
@@ -274,9 +299,11 @@ func (m *Model) View() string {
 		label("compartment", m.selectedCompartmentName),
 		"  ",
 		label("log group", m.selectedLogGroupName),
+		"  ",
+		label("selected", fmt.Sprintf("%d", m.selectedCount())),
 	)
 
-	help := helpStyle.Render("1:compartments  2:log groups  3:logs  4:search  enter:open  esc:up  r:refresh  tab:next  q:quit")
+	help := helpStyle.Render("1:compartments  2:log groups  3:logs  4:search  enter:open  space:select  s:search  esc:up  r:refresh  tab:next  q:quit")
 
 	return appStyle.Render(lipgloss.JoinVertical(lipgloss.Left,
 		titleStyle.Render(" fw-oci "),
@@ -365,6 +392,120 @@ func (m *Model) filterEditing() bool {
 	return l != nil && l.FilterState() == list.Filtering
 }
 
+// toggleSelection flips the selection of the item under the cursor in the
+// active list. The list's GlobalIndex maps the visible cursor to the item's
+// position in the unfiltered Items slice, so SetItem updates in place without
+// resetting the cursor.
+func (m *Model) toggleSelection() tea.Cmd {
+	l := m.activeList()
+	if l == nil || l.FilterState() == list.Filtering {
+		return nil
+	}
+
+	idx := l.GlobalIndex()
+	items := l.Items()
+	if idx < 0 || idx >= len(items) {
+		return nil
+	}
+
+	var id string
+	var selected bool
+	switch it := items[idx].(type) {
+	case compartmentItem:
+		it.selected = !it.selected
+		items[idx] = it
+		id, selected = it.id, it.selected
+	case logGroupItem:
+		it.selected = !it.selected
+		items[idx] = it
+		id, selected = it.id, it.selected
+	case logItem:
+		it.selected = !it.selected
+		items[idx] = it
+		id, selected = it.id, it.selected
+	default:
+		return nil
+	}
+
+	m.selected[id] = selected
+	return l.SetItem(idx, items[idx])
+}
+
+// enterSearch switches to the search tab, preloading the scope from the current
+// selection when the query is empty (so it never clobbers a query in progress).
+func (m *Model) enterSearch() tea.Cmd {
+	m.tab = tabSearch
+	if strings.TrimSpace(m.query.Value()) == "" {
+		m.query.SetValue(m.buildScopeQuery())
+		m.query.CursorEnd()
+	}
+	return nil
+}
+
+// preloadSearch rebuilds the scope from the current selection, overwriting any
+// existing query, and jumps to the search tab with the scope pre-filled.
+func (m *Model) preloadSearch() tea.Cmd {
+	m.tab = tabSearch
+	m.query.SetValue(m.buildScopeQuery())
+	m.query.CursorEnd()
+	return nil
+}
+
+// buildScopeQuery assembles a `search "ocid1", "ocid2" | ` scope from the
+// selected items, falling back to the drilled-into log group or compartment.
+func (m *Model) buildScopeQuery() string {
+	ocids := make([]string, 0)
+	seen := make(map[string]bool)
+
+	for _, l := range []list.Model{m.compartments, m.logGroups, m.logs} {
+		for _, it := range l.Items() {
+			var id string
+			var selected bool
+			switch v := it.(type) {
+			case compartmentItem:
+				id, selected = v.id, v.selected
+			case logGroupItem:
+				id, selected = v.id, v.selected
+			case logItem:
+				id, selected = v.id, v.selected
+			}
+			if selected && id != "" && !seen[id] {
+				seen[id] = true
+				ocids = append(ocids, id)
+			}
+		}
+	}
+
+	if len(ocids) == 0 {
+		switch {
+		case m.selectedLogGroupID != "":
+			ocids = append(ocids, m.selectedLogGroupID)
+		case m.selectedCompartmentID != "":
+			ocids = append(ocids, m.selectedCompartmentID)
+		}
+	}
+	if len(ocids) == 0 {
+		return ""
+	}
+
+	quoted := make([]string, len(ocids))
+	for i, id := range ocids {
+		quoted[i] = fmt.Sprintf("%q", id)
+	}
+	return "search " + strings.Join(quoted, ", ") + " | "
+}
+
+// selectedCount returns the number of currently selected items.
+func (m *Model) selectedCount() int {
+	n := 0
+	for _, sel := range m.selected {
+		if sel {
+			n++
+		}
+	}
+	return n
+}
+
 // --- async message types ---
 
 type compartmentsMsg struct {
@@ -433,42 +574,60 @@ func (m *Model) runSearch() tea.Msg {
 		return searchMsg{err: err}
 	}
 
-	content := ""
+	var content strings.Builder
 	for i, r := range results {
-		content += fmt.Sprintf("%d. %s\n\n", i+1, r)
+		fmt.Fprintf(&content, "%d. %s\n\n", i+1, r)
 	}
-	return searchMsg{content: content}
+	return searchMsg{content: content.String()}
 }
 
 // --- list item wrappers ---
 
 type compartmentItem struct {
-	id    string
-	name  string
-	state string
+	id       string
+	name     string
+	state    string
+	selected bool
 }
 
-func (i compartmentItem) Title() string       { return i.name }
+func (i compartmentItem) Title() string {
+	if i.selected {
+		return "[x] " + i.name
+	}
+	return "[ ] " + i.name
+}
 func (i compartmentItem) Description() string { return i.state + "  " + i.id }
 func (i compartmentItem) FilterValue() string { return i.name + " " + i.id }
 
 type logGroupItem struct {
-	id   string
-	name string
+	id       string
+	name     string
+	selected bool
 }
 
-func (i logGroupItem) Title() string       { return i.name }
+func (i logGroupItem) Title() string {
+	if i.selected {
+		return "[x] " + i.name
+	}
+	return "[ ] " + i.name
+}
 func (i logGroupItem) Description() string { return i.id }
 func (i logGroupItem) FilterValue() string { return i.name + " " + i.id }
 
 type logItem struct {
-	id      string
-	name    string
-	logType string
-	enabled bool
+	id       string
+	name     string
+	logType  string
+	enabled  bool
+	selected bool
 }
 
-func (i logItem) Title() string { return i.name }
+func (i logItem) Title() string {
+	if i.selected {
+		return "[x] " + i.name
+	}
+	return "[ ] " + i.name
+}
 func (i logItem) Description() string {
 	return fmt.Sprintf("%s  enabled=%v  %s", i.logType, i.enabled, i.id)
 }
