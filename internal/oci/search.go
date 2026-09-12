@@ -17,19 +17,46 @@ type SearchQuery struct {
 	Limit int
 }
 
-// SearchLogs runs a query and returns each result's raw JSON payload.
+// maxSearchWindow is the maximum time range a single Logging Search call can
+// cover. Longer ranges are split into consecutive windows.
+const maxSearchWindow = 14 * 24 * time.Hour
+
+// SearchLogs runs a query over the requested time range and returns each
+// result's raw JSON payload. Because a single Logging Search call only covers
+// 14 days, longer ranges are split into consecutive windows and the results
+// combined.
 func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]interface{}, error) {
 	if q.Limit <= 0 {
 		q.Limit = 100
 	}
 
+	var out []interface{}
+	for start := q.Start; start.Before(q.End); {
+		end := start.Add(maxSearchWindow)
+		if end.After(q.End) {
+			end = q.End
+		}
+
+		results, err := c.searchWindow(ctx, q.Query, start, end, q.Limit)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, results...)
+
+		start = end
+	}
+	return out, nil
+}
+
+// searchWindow performs a single Logging Search call over one time window.
+func (c *Client) searchWindow(ctx context.Context, query string, start, end time.Time, limit int) ([]interface{}, error) {
 	req := loggingsearch.SearchLogsRequest{
 		SearchLogsDetails: loggingsearch.SearchLogsDetails{
-			TimeStart:   &common.SDKTime{Time: q.Start},
-			TimeEnd:     &common.SDKTime{Time: q.End},
-			SearchQuery: common.String(q.Query),
+			TimeStart:   &common.SDKTime{Time: start},
+			TimeEnd:     &common.SDKTime{Time: end},
+			SearchQuery: common.String(query),
 		},
-		Limit: common.Int(q.Limit),
+		Limit: common.Int(limit),
 	}
 
 	resp, err := c.search.SearchLogs(ctx, req)
