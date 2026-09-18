@@ -24,8 +24,15 @@ import (
 // Focusable fields, cycled with tab/shift+tab.
 const (
 	focusQuery = iota
+	focusPipe
 	focusFrom
 	focusTo
+)
+
+// Result panes, switchable with ctrl+left / ctrl+right.
+const (
+	paneFormatted = iota
+	paneOriginal
 )
 
 // maxSearchSpan is the OCI Logging limit on the searchable time range.
@@ -49,20 +56,27 @@ type copiedMsg struct {
 	err   error
 }
 
-// Model renders the search screen: a query textarea, from/to date fields, and
-// a results viewport.
+// Model renders the search screen: a query textarea, a jq/sed pipeline field,
+// from/to date fields, and two side-by-side result panes (formatted output on
+// the left, the original JSON on the right).
 type Model struct {
-	session   *state.Session
-	query     textarea.Model
-	from      textinput.Model
-	to        textinput.Model
-	focus     int
+	session *state.Session
+	query   textarea.Model
+	pipe    textarea.Model
+	from    textinput.Model
+	to      textinput.Model
+	focus   int
+
 	results   viewport.Model
-	content   string
-	status    string
-	searching bool
-	searched  bool
-	err       error
+	formatted viewport.Model
+	pane      int
+
+	content          string
+	formattedContent string
+	status           string
+	searching        bool
+	searched         bool
+	err              error
 
 	width        int
 	history      *history.Store
@@ -78,6 +92,11 @@ func New(session *state.Session) Model {
 	q.ShowLineNumbers = false
 	q.Focus()
 
+	p := textarea.New()
+	p.Placeholder = "jq '.[] | .message' | sed 's/foo/bar/g'"
+	p.SetHeight(2)
+	p.ShowLineNumbers = false
+
 	now := time.Now()
 	from := textinput.New()
 	from.Placeholder = "YYYY-MM-DD HH:MM"
@@ -90,9 +109,28 @@ func New(session *state.Session) Model {
 	to.Width = 20
 
 	results := viewport.New(0, 0)
-	// Restrict the viewport to non-typing keys so editing the query or dates
-	// never scrolls the results.
-	results.KeyMap = viewport.KeyMap{
+	results.KeyMap = resultKeyMap()
+	formatted := viewport.New(0, 0)
+	formatted.KeyMap = resultKeyMap()
+
+	m := Model{
+		session:   session,
+		query:     q,
+		pipe:      p,
+		from:      from,
+		to:        to,
+		results:   results,
+		formatted: formatted,
+		history:   history.Load(),
+	}
+	m.setFormatted("")
+	return m
+}
+
+// resultKeyMap restricts a viewport to non-typing keys so editing the query,
+// pipeline, or dates never scrolls the results.
+func resultKeyMap() viewport.KeyMap {
+	return viewport.KeyMap{
 		PageUp:       key.NewBinding(key.WithKeys("pgup")),
 		PageDown:     key.NewBinding(key.WithKeys("pgdown")),
 		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u")),
@@ -102,27 +140,23 @@ func New(session *state.Session) Model {
 		Left:         key.NewBinding(key.WithKeys("left")),
 		Right:        key.NewBinding(key.WithKeys("right")),
 	}
-
-	return Model{
-		session: session,
-		query:   q,
-		from:    from,
-		to:      to,
-		results: results,
-		history: history.Load(),
-	}
 }
 
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m *Model) Resize(width, contentHeight int) {
 	m.width = width
-	m.results.Height = contentHeight - 7
+	h := contentHeight - 10
+	if h < 3 {
+		h = 3
+	}
+	m.results.Height = h
+	m.formatted.Height = h
 	m.applyWidths()
 }
 
-// applyWidths sizes the query and results to the space left of the history
-// sidebar when it is shown.
+// applyWidths sizes the query, pipeline, and the two result panes to the space
+// left of the history sidebar when it is shown.
 func (m *Model) applyWidths() {
 	w := m.width - 4
 	if m.showHistory {
@@ -132,7 +166,17 @@ func (m *Model) applyWidths() {
 		w = 20
 	}
 	m.query.SetWidth(w)
-	m.results.Width = w
+	m.pipe.SetWidth(w)
+
+	// Split the remaining width into two panes separated by a small gap. Each
+	// pane spends 2 columns on padding and 2 on its border.
+	const gap = 2
+	inner := (w-gap)/2 - 4
+	if inner < 10 {
+		inner = 10
+	}
+	m.results.Width = inner
+	m.formatted.Width = inner
 }
 
 // Preload overwrites the query with the current selection scope.
@@ -157,6 +201,21 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.searched = true
 			m.content = msg.Content
 			m.results.SetContent(highlightJSON(msg.Content))
+			if p := strings.TrimSpace(m.pipe.Value()); p != "" {
+				return m, m.pipeCmd(p, m.content)
+			}
+			m.setFormatted("")
+		}
+		return m, nil
+
+	case pipedMsg:
+		if msg.err != nil {
+			m.status = "pipeline failed"
+			m.formattedContent = ""
+			m.formatted.SetContent(theme.Error.Render(msg.err.Error()))
+		} else {
+			m.status = "pipeline applied"
+			m.setFormatted(msg.content)
 		}
 		return m, nil
 
@@ -193,34 +252,48 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, copyCmd("query", q)
 		case "tab":
-			m.focus = (m.focus + 1) % 3
+			m.focus = (m.focus + 1) % 4
 			m.syncFocus()
 			return m, nil
 		case "shift+tab":
-			m.focus = (m.focus + 2) % 3
+			m.focus = (m.focus + 3) % 4
 			m.syncFocus()
+			return m, nil
+		case "ctrl+left":
+			m.pane = paneFormatted
+			return m, nil
+		case "ctrl+right":
+			m.pane = paneOriginal
+			return m, nil
+		case "ctrl+t":
+			m.pane = 1 - m.pane
 			return m, nil
 		case "esc":
 			return m, func() tea.Msg { return state.GoUp{} }
 		case "enter":
+			if m.focus == focusPipe {
+				return m.applyPipeline()
+			}
 			return m.submit()
 		case "pgup":
-			m.results.PageUp()
+			m.activeViewport().PageUp()
 			return m, nil
 		case "pgdown":
-			m.results.PageDown()
+			m.activeViewport().PageDown()
 			return m, nil
 		case "home":
-			m.results.GotoTop()
+			m.activeViewport().GotoTop()
 			return m, nil
 		case "end":
-			m.results.GotoBottom()
+			m.activeViewport().GotoBottom()
 			return m, nil
 		}
 	}
 
 	var fc, rc tea.Cmd
 	switch m.focus {
+	case focusPipe:
+		m.pipe, fc = m.pipe.Update(msg)
 	case focusFrom:
 		m.from, fc = m.from.Update(msg)
 	case focusTo:
@@ -228,8 +301,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	default:
 		m.query, fc = m.query.Update(msg)
 	}
-	m.results, rc = m.results.Update(msg)
+	if m.pane == paneFormatted {
+		m.formatted, rc = m.formatted.Update(msg)
+	} else {
+		m.results, rc = m.results.Update(msg)
+	}
 	return m, tea.Batch(fc, rc)
+}
+
+// activeViewport returns the viewport of the pane that scroll keys target.
+func (m *Model) activeViewport() *viewport.Model {
+	if m.pane == paneFormatted {
+		return &m.formatted
+	}
+	return &m.results
 }
 
 // syncFocus moves input focus to the currently selected field.
@@ -238,6 +323,11 @@ func (m *Model) syncFocus() {
 		m.query.Focus()
 	} else {
 		m.query.Blur()
+	}
+	if m.focus == focusPipe {
+		m.pipe.Focus()
+	} else {
+		m.pipe.Blur()
 	}
 	if m.focus == focusFrom {
 		m.from.Focus()
@@ -401,6 +491,53 @@ func (m Model) searchCmd(q string, from, to time.Time) tea.Cmd {
 	}
 }
 
+// applyPipeline runs the typed shell pipeline against the current JSON result.
+func (m Model) applyPipeline() (Model, tea.Cmd) {
+	pipeline := strings.TrimSpace(m.pipe.Value())
+	if pipeline == "" {
+		m.status = "pipeline is empty"
+		m.setFormatted("")
+		return m, nil
+	}
+	if m.content == "" {
+		m.status = "run a search first"
+		return m, nil
+	}
+	m.status = "applying pipeline..."
+	return m, m.pipeCmd(pipeline, m.content)
+}
+
+// setFormatted stores raw pipeline output and renders it into the left pane,
+// highlighting it only when it is valid JSON.
+func (m *Model) setFormatted(raw string) {
+	m.formattedContent = raw
+	switch {
+	case strings.TrimSpace(raw) == "":
+		m.formatted.SetContent(theme.Help.Render("enter a pipeline above and press enter to format"))
+	case json.Valid([]byte(raw)):
+		m.formatted.SetContent(highlightJSON(raw))
+	default:
+		m.formatted.SetContent(raw)
+	}
+}
+
+// panesView renders the formatted output and the original JSON side by side.
+func (m Model) panesView() string {
+	left := m.paneBox("formatted", m.formatted.View(), m.pane == paneFormatted)
+	right := m.paneBox("original", m.results.View(), m.pane == paneOriginal)
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)
+}
+
+// paneBox frames a viewport with a title, highlighting the active pane.
+func (m Model) paneBox(title, view string, active bool) string {
+	style := theme.Pane
+	if active {
+		style = theme.PaneActive
+	}
+	header := theme.SidebarTitle.Render(title)
+	return style.Width(m.results.Width + 2).Height(m.results.Height + 1).Render(header + "\n" + view)
+}
+
 func (m Model) View() string {
 	body := ""
 	switch {
@@ -411,12 +548,13 @@ func (m Model) View() string {
 	case !m.searched:
 		body = theme.Help.Render("enter a query and press enter")
 	default:
-		if r := m.results.View(); r == "" {
-			body = theme.Help.Render("no results")
-		} else {
-			body = r
-		}
+		body = m.panesView()
 	}
+
+	pipe := lipgloss.JoinVertical(lipgloss.Left,
+		theme.Help.Render("pipeline (jq/sed, enter to apply):"),
+		m.pipe.View(),
+	)
 
 	dates := lipgloss.JoinHorizontal(lipgloss.Left,
 		theme.Help.Render("from: "), m.from.View(),
@@ -429,9 +567,9 @@ func (m Model) View() string {
 		status = theme.Help.Render(m.status)
 	}
 	if m.showHistory {
-		body = padLines(body, m.results.Height)
+		body = padLines(body, m.results.Height+1)
 	}
-	main := lipgloss.JoinVertical(lipgloss.Left, m.query.View(), "\n", dates, status, body)
+	main := lipgloss.JoinVertical(lipgloss.Left, m.query.View(), "\n", pipe, "\n", dates, status, body)
 
 	if !m.showHistory {
 		return main

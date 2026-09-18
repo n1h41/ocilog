@@ -26,6 +26,16 @@ var (
 		BorderForeground(lipgloss.Color("#7D56F4")).
 		Padding(0, 1)
 
+	Pane = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3B4261")).
+		Padding(0, 1)
+
+	PaneActive = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#7D56F4")).
+			Padding(0, 1)
+
 	SidebarTitle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#7D56F4"))

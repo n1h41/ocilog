@@ -66,7 +66,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
 		}
 		if m.filterEditing() {
@@ -232,7 +232,7 @@ func (m *Model) View() string {
 		"  " + label("log group", m.session.LogGroupName) +
 		"  " + label("selected", fmt.Sprintf("%d", m.session.SelectedCount()))
 
-	help := theme.Help.Render("1:compartments  2:log groups  3:logs  4:search  enter:open/search  space:select  s:search  esc:up  r:refresh  tab:next/field  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy json  ctrl+o:copy query  q:quit")
+	help := theme.Help.Render("1:compartments  2:log groups  3:logs  4:search  enter:open/search  enter(pipe):apply  space:select  s:search  esc:up  r:refresh  tab:next/field  ctrl+t/ctrl+left/right:pane  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy json  ctrl+o:copy query  q:quit")
 
 	return theme.App.Render(lipgloss.JoinVertical(lipgloss.Left,
 		theme.Title.Render(" fw-oci "),
