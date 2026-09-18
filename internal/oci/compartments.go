@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/identity"
 )
 
@@ -20,10 +19,10 @@ type Compartment struct {
 // root (tenancy) compartment itself.
 func (c *Client) ListCompartments(ctx context.Context, tenancyID string) ([]Compartment, error) {
 	req := identity.ListCompartmentsRequest{
-		CompartmentId:          common.String(tenancyID),
-		CompartmentIdInSubtree: common.Bool(true),
+		CompartmentId:          new(tenancyID),
+		CompartmentIdInSubtree: new(true),
 		AccessLevel:            identity.ListCompartmentsAccessLevelAccessible,
-		Limit:                  common.Int(1000),
+		Limit:                  new(1000),
 	}
 	resp, err := c.identity.ListCompartments(ctx, req)
 	if err != nil {

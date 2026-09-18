@@ -21,6 +21,7 @@ type item struct {
 	logType  string
 	enabled  bool
 	selected bool
+	key      string
 }
 
 func (i item) Title() string {
@@ -36,6 +37,8 @@ func (i item) Description() string {
 
 func (i item) FilterValue() string { return i.name + " " + i.logType }
 func (i item) OCID() string        { return i.id }
+
+func (i item) SelectionKey() string { return i.key }
 
 func (i item) WithSelected(selected bool) list.Item {
 	i.selected = selected
@@ -88,12 +91,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.Err == nil {
 			items := make([]list.Item, 0, len(msg.Logs))
 			for _, l := range msg.Logs {
+				key := m.session.CompartmentID + "/" + m.session.LogGroupName + "/" + l.Name
 				items = append(items, item{
 					id:       l.ID,
 					name:     l.Name,
 					logType:  l.LogType,
 					enabled:  l.Enabled,
-					selected: m.session.IsSelected(l.ID),
+					selected: m.session.IsSelected(key),
+					key:      key,
 				})
 			}
 			m.list.SetItems(items)

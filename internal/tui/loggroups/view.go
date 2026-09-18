@@ -18,6 +18,7 @@ type item struct {
 	id       string
 	name     string
 	selected bool
+	key      string
 }
 
 func (i item) Title() string {
@@ -30,6 +31,8 @@ func (i item) Title() string {
 func (i item) Description() string { return i.id }
 func (i item) FilterValue() string { return i.name + " " + i.id }
 func (i item) OCID() string        { return i.id }
+
+func (i item) SelectionKey() string { return i.key }
 
 func (i item) WithSelected(selected bool) list.Item {
 	i.selected = selected
@@ -82,10 +85,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.Err == nil {
 			items := make([]list.Item, 0, len(msg.Groups))
 			for _, g := range msg.Groups {
+				key := m.session.CompartmentID + "/" + g.Name
 				items = append(items, item{
 					id:       g.ID,
 					name:     g.Name,
-					selected: m.session.IsSelected(g.ID),
+					selected: m.session.IsSelected(key),
+					key:      key,
 				})
 			}
 			m.list.SetItems(items)

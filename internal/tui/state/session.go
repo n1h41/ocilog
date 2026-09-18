@@ -38,10 +38,10 @@ func New(client *oci.Client, tenancyID, initialCompartment string) *Session {
 	}
 }
 
-// IsSelected reports whether the given OCID is currently selected.
+// IsSelected reports whether the given selection key is currently selected.
 func (s *Session) IsSelected(ocid string) bool { return s.selected[ocid] }
 
-// SetSelected marks (or clears) an OCID as selected, preserving selection order.
+// SetSelected marks (or clears) a selection key as selected, preserving order.
 func (s *Session) SetSelected(ocid string, selected bool) {
 	if selected {
 		if !s.selected[ocid] {
@@ -62,11 +62,12 @@ func (s *Session) SetSelected(ocid string, selected bool) {
 	}
 }
 
-// SelectedCount returns the number of selected OCIDs.
+// SelectedCount returns the number of selected items.
 func (s *Session) SelectedCount() int { return len(s.selectedOrder) }
 
-// ScopeOCIDs returns the OCIDs for the search scope: all selected items, or a
-// fallback to the drilled-into log group, then compartment, when none selected.
+// ScopeOCIDs returns the selection keys for the search scope: all selected
+// items, or a fallback to the drilled-into log group, then compartment, when
+// none selected.
 func (s *Session) ScopeOCIDs() []string {
 	if len(s.selectedOrder) > 0 {
 		return append([]string{}, s.selectedOrder...)

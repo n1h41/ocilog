@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/logging"
 )
 
@@ -27,8 +26,8 @@ type Log struct {
 // ListLogGroups returns all log groups in the given compartment OCID.
 func (c *Client) ListLogGroups(ctx context.Context, compartmentID string) ([]LogGroup, error) {
 	req := logging.ListLogGroupsRequest{
-		CompartmentId: common.String(compartmentID),
-		Limit:         common.Int(1000),
+		CompartmentId: new(compartmentID),
+		Limit:         new(1000),
 	}
 	resp, err := c.manage.ListLogGroups(ctx, req)
 	if err != nil {
@@ -49,8 +48,8 @@ func (c *Client) ListLogGroups(ctx context.Context, compartmentID string) ([]Log
 // ListLogs returns all logs within the given log group OCID.
 func (c *Client) ListLogs(ctx context.Context, logGroupID string) ([]Log, error) {
 	req := logging.ListLogsRequest{
-		LogGroupId: common.String(logGroupID),
-		Limit:      common.Int(1000),
+		LogGroupId: new(logGroupID),
+		Limit:      new(1000),
 	}
 	resp, err := c.manage.ListLogs(ctx, req)
 	if err != nil {

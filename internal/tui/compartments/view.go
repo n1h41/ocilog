@@ -32,6 +32,8 @@ func (i item) Description() string { return i.state + "  " + i.id }
 func (i item) FilterValue() string { return i.name + " " + i.id }
 func (i item) OCID() string        { return i.id }
 
+func (i item) SelectionKey() string { return i.id }
+
 func (i item) WithSelected(selected bool) list.Item {
 	i.selected = selected
 	return i

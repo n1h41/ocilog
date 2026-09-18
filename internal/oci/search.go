@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,19 +17,46 @@ type SearchQuery struct {
 	Limit int
 }
 
-// SearchLogs runs a query and returns each result rendered as a JSON string.
-func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]string, error) {
+// maxSearchWindow is the maximum time range a single Logging Search call can
+// cover. Longer ranges are split into consecutive windows.
+const maxSearchWindow = 14 * 24 * time.Hour
+
+// SearchLogs runs a query over the requested time range and returns each
+// result's raw JSON payload. Because a single Logging Search call only covers
+// 14 days, longer ranges are split into consecutive windows and the results
+// combined.
+func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]any, error) {
 	if q.Limit <= 0 {
 		q.Limit = 100
 	}
 
+	var out []any
+	for start := q.Start; start.Before(q.End); {
+		end := start.Add(maxSearchWindow)
+		if end.After(q.End) {
+			end = q.End
+		}
+
+		results, err := c.searchWindow(ctx, q.Query, start, end, q.Limit)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, results...)
+
+		start = end
+	}
+	return out, nil
+}
+
+// searchWindow performs a single Logging Search call over one time window.
+func (c *Client) searchWindow(ctx context.Context, query string, start, end time.Time, limit int) ([]any, error) {
 	req := loggingsearch.SearchLogsRequest{
 		SearchLogsDetails: loggingsearch.SearchLogsDetails{
-			TimeStart:   &common.SDKTime{Time: q.Start},
-			TimeEnd:     &common.SDKTime{Time: q.End},
-			SearchQuery: common.String(q.Query),
+			TimeStart:   &common.SDKTime{Time: start},
+			TimeEnd:     &common.SDKTime{Time: end},
+			SearchQuery: new(query),
 		},
-		Limit: common.Int(q.Limit),
+		Limit: new(limit),
 	}
 
 	resp, err := c.search.SearchLogs(ctx, req)
@@ -38,14 +64,13 @@ func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]string, error
 		return nil, fmt.Errorf("search logs: %w", err)
 	}
 
-	out := make([]string, 0, len(resp.Results))
+	out := make([]any, 0, len(resp.Results))
 	for _, r := range resp.Results {
-		b, err := json.MarshalIndent(r.Data, "", "  ")
-		if err != nil {
-			out = append(out, fmt.Sprintf("%v", r.Data))
+		if r.Data == nil {
+			out = append(out, nil)
 			continue
 		}
-		out = append(out, string(b))
+		out = append(out, *r.Data)
 	}
 	return out, nil
 }
