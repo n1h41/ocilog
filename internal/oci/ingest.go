@@ -15,21 +15,21 @@ func (c *Client) IngestLogs(ctx context.Context, logID, source, logType string, 
 	entries := make([]loggingingestion.LogEntry, 0, len(lines))
 	for _, line := range lines {
 		entries = append(entries, loggingingestion.LogEntry{
-			Data: common.String(line),
-			Id:   common.String(uuid.NewString()),
+			Data: new(line),
+			Id:   new(uuid.NewString()),
 			Time: &common.SDKTime{Time: time.Now()},
 		})
 	}
 
 	req := loggingingestion.PutLogsRequest{
-		LogId: common.String(logID),
+		LogId: new(logID),
 		PutLogsDetails: loggingingestion.PutLogsDetails{
-			Specversion: common.String("1.0"),
+			Specversion: new("1.0"),
 			LogEntryBatches: []loggingingestion.LogEntryBatch{
 				{
 					Entries:             entries,
-					Source:              common.String(source),
-					Type:                common.String(logType),
+					Source:              new(source),
+					Type:                new(logType),
 					Defaultlogentrytime: &common.SDKTime{Time: time.Now()},
 				},
 			},
