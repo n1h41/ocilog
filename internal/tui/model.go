@@ -237,7 +237,7 @@ func (m *Model) View() string {
 		"  " + label("selected", fmt.Sprintf("%d", m.session.SelectedCount()))
 	status = ansi.Truncate(status, m.width-2, "…")
 
-	helpText := "1:compartments  2:log groups  3:logs  4:search  enter:open/search  enter(pipe):apply  space:select  s:search  esc:up  r:refresh  tab:next/field  ctrl+t/ctrl+left/right:pane  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy json  ctrl+o:copy query  q:quit"
+	helpText := "1:compartments  2:log groups  3:logs  4:search  enter:open/search  enter(pipe):apply  space:select  s:search  esc:up  r:refresh  tab:next/field  ctrl+t/ctrl+left/right:pane  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy json  ctrl+o:copy query"
 	help := theme.Help.Render(ansi.Truncate(helpText, m.width-2, "…"))
 
 	return theme.App.Render(lipgloss.JoinVertical(lipgloss.Left,
