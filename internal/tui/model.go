@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"n1h41/fw-oci/internal/oci"
 	"n1h41/fw-oci/internal/tui/compartments"
@@ -168,7 +169,10 @@ func (m *Model) delegate(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) resize() {
-	contentHeight := m.height - 7
+	// Reserve the fixed chrome around the active view: title, two blank
+	// lines, the status line, another blank line, a single-line help bar, and
+	// one line of top/bottom padding (8 lines total).
+	contentHeight := m.height - 8
 	m.compartments.Resize(m.width, contentHeight)
 	m.logGroups.Resize(m.width, contentHeight)
 	m.logs.Resize(m.width, contentHeight)
@@ -231,8 +235,10 @@ func (m *Model) View() string {
 	status := label("compartment", m.session.CompartmentName) +
 		"  " + label("log group", m.session.LogGroupName) +
 		"  " + label("selected", fmt.Sprintf("%d", m.session.SelectedCount()))
+	status = ansi.Truncate(status, m.width-2, "…")
 
-	help := theme.Help.Render("1:compartments  2:log groups  3:logs  4:search  enter:open/search  enter(pipe):apply  space:select  s:search  esc:up  r:refresh  tab:next/field  ctrl+t/ctrl+left/right:pane  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy json  ctrl+o:copy query  q:quit")
+	helpText := "1:compartments  2:log groups  3:logs  4:search  enter:open/search  enter(pipe):apply  space:select  s:search  esc:up  r:refresh  tab:next/field  ctrl+t/ctrl+left/right:pane  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy json  ctrl+o:copy query  q:quit"
+	help := theme.Help.Render(ansi.Truncate(helpText, m.width-2, "…"))
 
 	return theme.App.Render(lipgloss.JoinVertical(lipgloss.Left,
 		theme.Title.Render(" fw-oci "),

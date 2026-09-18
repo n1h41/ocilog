@@ -146,7 +146,10 @@ func (m Model) Init() tea.Cmd { return nil }
 
 func (m *Model) Resize(width, contentHeight int) {
 	m.width = width
-	h := contentHeight - 10
+	// Reserve the fixed rows above the panes: query (3), blank (1), pipeline
+	// label+field (3), blank (1), dates (1), status (1), and the pane header
+	// (1) = 11 rows. The panes then get whatever vertical space remains.
+	h := contentHeight - 11
 	if h < 3 {
 		h = 3
 	}
@@ -569,7 +572,7 @@ func (m Model) View() string {
 	if m.showHistory {
 		body = padLines(body, m.results.Height+1)
 	}
-	main := lipgloss.JoinVertical(lipgloss.Left, m.query.View(), "\n", pipe, "\n", dates, status, body)
+	main := lipgloss.JoinVertical(lipgloss.Left, m.query.View(), "", pipe, "", dates, status, body)
 
 	if !m.showHistory {
 		return main
