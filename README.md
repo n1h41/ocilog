@@ -9,9 +9,9 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), `fw-oci` le
 - **Compartment browser** – navigate OCI compartments and scope the session.
 - **Log groups & logs** – list log groups and their logs with status indicators.
 - **Log search** – run Logging Search queries across custom time ranges; ranges longer than 14 days are automatically split into consecutive windows.
-- **Search history** – recent searches are persisted to `~/.config/fw-oci/history.json`.
+- **Search history** – recent searches (query + pipeline) are persisted to `~/.config/fw-oci/history.json`; re-running the same query and pipeline refreshes the entry instead of duplicating it.
 - **Ingestion** – send plain-text log lines to a specific log OCID.
-- **Clipboard integration** – copy result JSON or the current query with `ctrl+y` / `ctrl+o`.
+- **Clipboard integration** – copy the focused pane (formatted output or original JSON) or the current query with `ctrl+y` / `ctrl+o`.
 - **Fuzzy filtering** – filter long lists with `/` style search in each view.
 
 ## Requirements
@@ -75,9 +75,10 @@ Launch the application:
 | `r`                                | Refresh current tab                                 |
 | `esc`                              | Go up one level                                     |
 | `ctrl+r`                           | Open search history                                 |
-| `ctrl+y`                           | Copy selected JSON to clipboard                     |
+| `ctrl+y`                           | Copy focused pane (formatted/original) to clipboard |
 | `ctrl+o`                           | Copy current query to clipboard                     |
 | `ctrl+t` / `ctrl+←` / `ctrl+→`     | Switch panes                                        |
+| `ctrl+x`                           | Expand/collapse focused output pane                 |
 | `pgup` / `pgdn`                    | Scroll page up / down                               |
 | `home` / `end`                     | Jump to top / bottom                                |
 | `ctrl+c`                     | Quit                                                |

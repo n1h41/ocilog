@@ -70,6 +70,7 @@ type Model struct {
 	results   viewport.Model
 	formatted viewport.Model
 	pane      int
+	expanded  bool
 
 	content          string
 	formattedContent string
@@ -172,9 +173,15 @@ func (m *Model) applyWidths() {
 	m.pipe.SetWidth(w)
 
 	// Split the remaining width into two panes separated by a small gap. Each
-	// pane spends 2 columns on padding and 2 on its border.
+	// pane spends 2 columns on padding and 2 on its border. When a pane is
+	// expanded it takes the full width instead.
 	const gap = 2
-	inner := (w-gap)/2 - 4
+	var inner int
+	if m.expanded {
+		inner = w - 4
+	} else {
+		inner = (w-gap)/2 - 4
+	}
 	if inner < 10 {
 		inner = 10
 	}
@@ -242,11 +249,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.applyWidths()
 			return m, nil
 		case "ctrl+y":
-			if m.content == "" {
+			label, content := "original", m.content
+			if m.pane == paneFormatted {
+				label, content = "formatted", m.formattedContent
+			}
+			if content == "" {
 				m.status = "nothing to copy"
 				return m, nil
 			}
-			return m, copyCmd("results", m.content)
+			return m, copyCmd(label, content)
 		case "ctrl+o":
 			q := strings.TrimSpace(m.query.Value())
 			if q == "" {
@@ -270,6 +281,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		case "ctrl+t":
 			m.pane = 1 - m.pane
+			return m, nil
+		case "ctrl+x":
+			m.expanded = !m.expanded
+			m.applyWidths()
 			return m, nil
 		case "esc":
 			return m, func() tea.Msg { return state.GoUp{} }
@@ -375,6 +390,7 @@ func (m Model) submit() (Model, tea.Cmd) {
 	m.searched = false
 	if err := m.history.Add(history.Entry{
 		Query: q,
+		Pipe:  strings.TrimSpace(m.pipe.Value()),
 		From:  strings.TrimSpace(m.from.Value()),
 		To:    strings.TrimSpace(m.to.Value()),
 	}); err != nil {
@@ -428,6 +444,7 @@ func (m Model) updateHistory(msg tea.KeyMsg) (Model, tea.Cmd) {
 			e := entries[m.historyIndex]
 			m.query.SetValue(e.Query)
 			m.query.CursorEnd()
+			m.pipe.SetValue(e.Pipe)
 			if e.From != "" {
 				m.from.SetValue(e.From)
 			}
@@ -524,8 +541,15 @@ func (m *Model) setFormatted(raw string) {
 	}
 }
 
-// panesView renders the formatted output and the original JSON side by side.
+// panesView renders the formatted output and the original JSON side by side,
+// or only the focused pane when it is expanded.
 func (m Model) panesView() string {
+	if m.expanded {
+		if m.pane == paneFormatted {
+			return m.paneBox("formatted", m.formatted.View(), true)
+		}
+		return m.paneBox("original", m.results.View(), true)
+	}
 	left := m.paneBox("formatted", m.formatted.View(), m.pane == paneFormatted)
 	right := m.paneBox("original", m.results.View(), m.pane == paneOriginal)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)

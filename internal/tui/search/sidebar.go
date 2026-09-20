@@ -21,10 +21,10 @@ func (m Model) historySidebar(height int) string {
 	entries := m.history.Entries()
 
 	inner := m.sidebarWidth() - 4
-	contentH := max(height - 2, 1)
+	contentH := max(height-2, 1)
 
 	// Reserve a line each for the title, the spacer, and the footer.
-	maxVisible := max(contentH - 3, 1)
+	maxVisible := max(contentH-3, 1)
 
 	lines := []string{theme.SidebarTitle.Render("history")}
 	if len(entries) == 0 {
@@ -34,10 +34,13 @@ func (m Model) historySidebar(height int) string {
 		if m.historyIndex >= maxVisible {
 			start = m.historyIndex - maxVisible + 1
 		}
-		end := min(start + maxVisible, len(entries))
+		end := min(start+maxVisible, len(entries))
 		for i := start; i < end; i++ {
 			e := entries[i]
 			line := e.Query
+			if e.Pipe != "" {
+				line += "  | " + e.Pipe
+			}
 			if e.From != "" || e.To != "" {
 				line += "  [" + e.From + " → " + e.To + "]"
 			}
