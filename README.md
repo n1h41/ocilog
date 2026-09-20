@@ -1,15 +1,15 @@
-# fw-oci
+# ocilog
 
 A keyboard-driven terminal UI for exploring and searching Oracle Cloud Infrastructure (OCI) logs.
 
-Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), `fw-oci` lets you browse compartments, log groups, and logs, run OCI Logging Search queries, ingest test events, and copy results to the clipboard without leaving the terminal.
+Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), `ocilog` lets you browse compartments, log groups, and logs, run OCI Logging Search queries, ingest test events, and copy results to the clipboard without leaving the terminal.
 
 ## Features
 
 - **Compartment browser** – navigate OCI compartments and scope the session.
 - **Log groups & logs** – list log groups and their logs with status indicators.
 - **Log search** – run Logging Search queries across custom time ranges; ranges longer than 14 days are automatically split into consecutive windows.
-- **Search history** – recent searches (query + pipeline) are persisted to `~/.config/fw-oci/history.json`; re-running the same query and pipeline refreshes the entry instead of duplicating it.
+- **Search history** – recent searches (query + pipeline) are persisted to `~/.config/ocilog/history.json`; re-running the same query and pipeline refreshes the entry instead of duplicating it.
 - **Ingestion** – send plain-text log lines to a specific log OCID.
 - **Clipboard integration** – copy the focused pane (formatted output or original JSON) or the current query with `ctrl+y` / `ctrl+o`.
 - **Fuzzy filtering** – filter long lists with `/` style search in each view.
@@ -22,20 +22,20 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea), `fw-oci` le
 ## Installation
 
 ```bash
-git clone https://github.com/n1h41/fw-oci.git
-cd fw-oci
-go build -o fw-oci ./cmd/fw-oci
+git clone https://github.com/n1h41/ocilog.git
+cd ocilog
+go build -o ocilog ./cmd/ocilog
 ```
 
 Optionally install to `$GOPATH/bin`:
 
 ```bash
-go install ./cmd/fw-oci
+go install ./cmd/ocilog
 ```
 
 ## Configuration
 
-`fw-oci` uses the standard OCI configuration provider, so it respects `~/.oci/config` and environment variables such as `OCI_CLI_AUTH`, `OCI_CONFIG_FILE`, `OCI_PROFILE`, etc.
+`ocilog` uses the standard OCI configuration provider, so it respects `~/.oci/config` and environment variables such as `OCI_CLI_AUTH`, `OCI_CONFIG_FILE`, `OCI_PROFILE`, etc.
 
 Two optional environment variables are specific to this tool:
 
@@ -49,7 +49,7 @@ Example:
 ```bash
 export OCI_REGION=us-ashburn-1
 export OCI_COMPARTMENT_OCID=ocid1.compartment.oc1..example
-./fw-oci
+./ocilog
 ```
 
 ## Usage
@@ -57,7 +57,7 @@ export OCI_COMPARTMENT_OCID=ocid1.compartment.oc1..example
 Launch the application:
 
 ```bash
-./fw-oci
+./ocilog
 ```
 
 ### Keybindings
@@ -87,7 +87,7 @@ Launch the application:
 
 ```
 .
-├── cmd/fw-oci
+├── cmd/ocilog
 │   └── main.go              # Application entry point
 ├── internal
 │   ├── config
@@ -117,7 +117,7 @@ Launch the application:
 Run the application during development:
 
 ```bash
-go run ./cmd/fw-oci
+go run ./cmd/ocilog
 ```
 
 Run tests:

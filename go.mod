@@ -1,4 +1,4 @@
-module n1h41/fw-oci
+module n1h41/ocilog
 
 go 1.26.6
 

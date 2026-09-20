@@ -4,7 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"n1h41/fw-oci/internal/tui/state"
+	"n1h41/ocilog/internal/tui/state"
 )
 
 // Item is a list item that carries an OCID and can render a selection marker.

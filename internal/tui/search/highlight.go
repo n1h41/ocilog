@@ -3,7 +3,7 @@ package search
 import (
 	"strings"
 
-	"n1h41/fw-oci/internal/tui/theme"
+	"n1h41/ocilog/internal/tui/theme"
 )
 
 // highlightJSON colorizes a JSON document for display. It expects the output of

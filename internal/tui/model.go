@@ -7,13 +7,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"n1h41/fw-oci/internal/oci"
-	"n1h41/fw-oci/internal/tui/compartments"
-	"n1h41/fw-oci/internal/tui/loggroups"
-	"n1h41/fw-oci/internal/tui/logs"
-	"n1h41/fw-oci/internal/tui/search"
-	"n1h41/fw-oci/internal/tui/state"
-	"n1h41/fw-oci/internal/tui/theme"
+	"n1h41/ocilog/internal/oci"
+	"n1h41/ocilog/internal/tui/compartments"
+	"n1h41/ocilog/internal/tui/loggroups"
+	"n1h41/ocilog/internal/tui/logs"
+	"n1h41/ocilog/internal/tui/search"
+	"n1h41/ocilog/internal/tui/state"
+	"n1h41/ocilog/internal/tui/theme"
 )
 
 type tab int
@@ -241,7 +241,7 @@ func (m *Model) View() string {
 	help := theme.Help.Render(ansi.Truncate(helpText, m.width-2, "…"))
 
 	return theme.App.Render(lipgloss.JoinVertical(lipgloss.Left,
-		theme.Title.Render(" fw-oci "),
+		theme.Title.Render(" ocilog "),
 		"",
 		status,
 		"",

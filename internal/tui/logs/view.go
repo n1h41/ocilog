@@ -9,10 +9,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"n1h41/fw-oci/internal/oci"
-	"n1h41/fw-oci/internal/tui/listutil"
-	"n1h41/fw-oci/internal/tui/state"
-	"n1h41/fw-oci/internal/tui/theme"
+	"n1h41/ocilog/internal/oci"
+	"n1h41/ocilog/internal/tui/listutil"
+	"n1h41/ocilog/internal/tui/state"
+	"n1h41/ocilog/internal/tui/theme"
 )
 
 type item struct {

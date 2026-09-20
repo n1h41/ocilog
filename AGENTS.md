@@ -4,26 +4,26 @@ Compact guidance for working in this repo.
 
 ## Project
 
-- `fw-oci` is a small Go TUI for browsing/searching Oracle Cloud Infrastructure logs.
-- Module: `n1h41/fw-oci`, Go 1.26.6.
-- Entry point: `cmd/fw-oci/main.go`.
+- `ocilog` is a small Go TUI for browsing/searching Oracle Cloud Infrastructure logs.
+- Module: `n1h41/ocilog`, Go 1.26.6.
+- Entry point: `cmd/ocilog/main.go`.
 - No tests, no CI, no Makefile/Taskfile, no lint config.
 
 ## Build & Run
 
 ```bash
 # Build binary
-go build -o fw-oci ./cmd/fw-oci
+go build -o ocilog ./cmd/ocilog
 
 # Run directly
-go run ./cmd/fw-oci
+go run ./cmd/ocilog
 ```
 
 ## Verification
 
 ```bash
 go vet ./...
-go build ./cmd/fw-oci
+go build ./cmd/ocilog
 ```
 
 `go test ./...` succeeds trivially because there are no test files yet.
@@ -41,7 +41,7 @@ go build ./cmd/fw-oci
 - `internal/oci` wraps the OCI SDK clients (identity, logging management, logging search, logging ingestion). New OCI operations belong here.
 - `internal/tui` contains Bubble Tea views. `model.go` is the root model; tabs are `compartments/`, `loggroups/`, `logs/`, `search/`.
 - `internal/config` loads only the two env vars above and builds the OCI provider.
-- `internal/history` persists recent searches to `~/.config/fw-oci/history.json`.
+- `internal/history` persists recent searches to `~/.config/ocilog/history.json`.
 
 ## Conventions
 

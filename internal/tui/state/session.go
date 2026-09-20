@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"n1h41/fw-oci/internal/oci"
+	"n1h41/ocilog/internal/oci"
 )
 
 // Session carries the cross-view state shared by all views: the OCI client and

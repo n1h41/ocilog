@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"n1h41/fw-oci/internal/config"
-	"n1h41/fw-oci/internal/oci"
-	"n1h41/fw-oci/internal/tui"
+	"n1h41/ocilog/internal/config"
+	"n1h41/ocilog/internal/oci"
+	"n1h41/ocilog/internal/tui"
 )
 
 func main() {

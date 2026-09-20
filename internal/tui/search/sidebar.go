@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"n1h41/fw-oci/internal/tui/theme"
+	"n1h41/ocilog/internal/tui/theme"
 )
 
 // sidebarWidth returns the total width of the history sidebar, scaled to the

@@ -35,7 +35,7 @@ func Load() *Store {
 	if err != nil {
 		return s
 	}
-	s.path = filepath.Join(dir, "fw-oci", "history.json")
+	s.path = filepath.Join(dir, "ocilog", "history.json")
 
 	data, err := os.ReadFile(s.path)
 	if err != nil {

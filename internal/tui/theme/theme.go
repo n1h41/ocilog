@@ -2,7 +2,7 @@ package theme
 
 import "github.com/charmbracelet/lipgloss"
 
-// Shared styles for the fw-oci TUI.
+// Shared styles for the ocilog TUI.
 var (
 	App = lipgloss.NewStyle().Padding(1)
 
