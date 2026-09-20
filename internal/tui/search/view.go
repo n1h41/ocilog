@@ -150,10 +150,7 @@ func (m *Model) Resize(width, contentHeight int) {
 	// Reserve the fixed rows above the panes: query (3), blank (1), pipeline
 	// label+field (3), blank (1), dates (1), status (1), and the pane header
 	// (1) = 11 rows. The panes then get whatever vertical space remains.
-	h := contentHeight - 11
-	if h < 3 {
-		h = 3
-	}
+	h := max(contentHeight - 11, 3)
 	m.results.Height = h
 	m.formatted.Height = h
 	m.applyWidths()
