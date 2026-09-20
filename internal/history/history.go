@@ -11,9 +11,10 @@ import (
 // maxEntries caps how many searches are retained.
 const maxEntries = 50
 
-// Entry is a previously executed search: its query and time range.
+// Entry is a previously executed search: its query, pipeline, and time range.
 type Entry struct {
 	Query string `json:"query"`
+	Pipe  string `json:"pipe,omitempty"`
 	From  string `json:"from"`
 	To    string `json:"to"`
 }
@@ -66,9 +67,13 @@ func decode(data []byte) ([]Entry, bool) {
 // Entries returns the stored searches, most recent first.
 func (s *Store) Entries() []Entry { return s.entries }
 
-// Add records entry at the front, removing duplicates, and persists the list.
+// Add records entry at the front, dropping any earlier entry with the same
+// query and pipeline, then persists the list. The time range is treated as
+// metadata: re-running the same query and pipeline refreshes the existing
+// entry rather than creating a duplicate.
 func (s *Store) Add(entry Entry) error {
 	entry.Query = strings.TrimSpace(entry.Query)
+	entry.Pipe = strings.TrimSpace(entry.Pipe)
 	entry.From = strings.TrimSpace(entry.From)
 	entry.To = strings.TrimSpace(entry.To)
 	if entry.Query == "" {
@@ -77,7 +82,7 @@ func (s *Store) Add(entry Entry) error {
 
 	entries := []Entry{entry}
 	for _, e := range s.entries {
-		if e != entry {
+		if e.Query != entry.Query || e.Pipe != entry.Pipe {
 			entries = append(entries, e)
 		}
 	}
