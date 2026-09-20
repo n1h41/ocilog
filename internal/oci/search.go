@@ -17,9 +17,9 @@ type SearchQuery struct {
 	Limit int
 }
 
-// maxSearchWindow is the maximum time range a single Logging Search call can
+// MaxSearchWindow is the maximum time range a single Logging Search call can
 // cover. Longer ranges are split into consecutive windows.
-const maxSearchWindow = 14 * 24 * time.Hour
+const MaxSearchWindow = 14 * 24 * time.Hour
 
 // SearchLogs runs a query over the requested time range and returns each
 // result's raw JSON payload. Because a single Logging Search call only covers
@@ -32,7 +32,7 @@ func (c *Client) SearchLogs(ctx context.Context, q SearchQuery) ([]any, error) {
 
 	var out []any
 	for start := q.Start; start.Before(q.End); {
-		end := start.Add(maxSearchWindow)
+		end := start.Add(MaxSearchWindow)
 		if end.After(q.End) {
 			end = q.End
 		}

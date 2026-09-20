@@ -261,6 +261,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.status = "nothing to copy"
 				return m, nil
 			}
+			if m.cliNeedsScript() {
+				return m, copyCmd("oci script", m.cliScript(q))
+			}
 			return m, copyCmd("oci command", m.cliCommand(q))
 		case "tab":
 			m.focus = (m.focus + 1) % 4
@@ -458,17 +461,86 @@ func (m Model) updateHistory(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// cliCommand builds the equivalent `oci logging-search search-logs` command for
-// the current query and date range, so a search can be reproduced outside the
-// TUI. The pipeline is intentionally excluded: it is applied locally to the
-// results, not part of the OCI request.
+// cliScriptTemplate is a bash script that reproduces the current search with
+// the `oci` CLI. Because a single Logging Search call only covers 14 days, it
+// walks the range in 14-day windows and then applies the jq/sed pipeline when
+// one is set. Each call projects `data.results[].data` so the pipeline receives
+// the same array of log entries the TUI uses.
+const cliScriptTemplate = `#!/usr/bin/env bash
+set -euo pipefail
+
+query=__QUERY__
+start=__START__
+end=__END__
+
+# OCI Logging Search covers at most 14 days per call, so split the range.
+window=$((14 * 24 * 60 * 60))
+cur=$(date -u -d "$start" +%s)
+last=$(date -u -d "$end" +%s)
+
+{
+  while [ "$cur" -lt "$last" ]; do
+    stop=$((cur + window))
+    [ "$stop" -gt "$last" ] && stop=$last
+    oci logging-search search-logs \
+      --search-query "$query" \
+      --time-start "$(date -u -d "@$cur" +%Y-%m-%dT%H:%M:%SZ)" \
+      --time-end "$(date -u -d "@$stop" +%Y-%m-%dT%H:%M:%SZ)" \
+      --limit 100 \
+      --query 'data.results[].data'
+    cur=$stop
+  done
+}__PIPELINE__
+`
+
+// cliNeedsScript reports whether the current date range exceeds the single-call
+// Logging Search limit and therefore needs a windowing script.
+func (m Model) cliNeedsScript() bool {
+	from, err := parseDate(m.from.Value(), false)
+	if err != nil {
+		return false
+	}
+	to, err := parseDate(m.to.Value(), true)
+	if err != nil {
+		return false
+	}
+	return to.Sub(from) > oci.MaxSearchWindow
+}
+
+// cliCommand builds a single `oci logging-search search-logs` invocation for
+// the current query and date range, piped through the jq/sed pipeline when one
+// is set. The --query projection selects the array of log entries, matching the
+// input the TUI feeds to its pipeline.
 func (m Model) cliCommand(query string) string {
 	start := m.cliDate(m.from.Value(), false)
 	end := m.cliDate(m.to.Value(), true)
-	return fmt.Sprintf(
-		"oci logging-search search-logs --search-query %s --time-end %s --time-start %s --limit 100",
+	cmd := fmt.Sprintf(
+		"oci logging-search search-logs --search-query %s --time-end %s --time-start %s --limit 100 --query 'data.results[].data'",
 		shellQuote(query), shellQuote(end), shellQuote(start),
 	)
+	return cmd + m.pipelineSuffix()
+}
+
+// cliScript builds the equivalent search as a runnable bash script for the
+// current query, date range, and jq/sed pipeline, so a search can be
+// reproduced outside the TUI.
+func (m Model) cliScript(query string) string {
+	start := m.cliDate(m.from.Value(), false)
+	end := m.cliDate(m.to.Value(), true)
+
+	script := strings.ReplaceAll(cliScriptTemplate, "__START__", shellQuote(start))
+	script = strings.ReplaceAll(script, "__END__", shellQuote(end))
+	script = strings.ReplaceAll(script, "__QUERY__", shellQuote(query))
+	return strings.ReplaceAll(script, "__PIPELINE__", m.pipelineSuffix())
+}
+
+// pipelineSuffix returns the jq/sed pipeline as a shell pipe, or an empty
+// string when no pipeline is set.
+func (m Model) pipelineSuffix() string {
+	if p := strings.TrimSpace(m.pipe.Value()); p != "" {
+		return " | " + p
+	}
+	return ""
 }
 
 // cliDate renders a from/to field as an RFC 3339 timestamp, falling back to the

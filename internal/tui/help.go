@@ -55,7 +55,7 @@ var (
 		{"home / end", "top / bottom"},
 		{"ctrl+r", "search history"},
 		{"ctrl+y", "copy active pane"},
-		{"ctrl+o", "copy as oci command"},
+		{"ctrl+o", "copy query as oci command (script if >14d)"},
 	}
 
 	helpHistoryEntries = []helpEntry{
