@@ -261,7 +261,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.status = "nothing to copy"
 				return m, nil
 			}
-			return m, copyCmd("query", q)
+			return m, copyCmd("oci command", m.cliCommand(q))
 		case "tab":
 			m.focus = (m.focus + 1) % 4
 			m.syncFocus()
@@ -456,6 +456,34 @@ func (m Model) updateHistory(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.applyWidths()
 	}
 	return m, nil
+}
+
+// cliCommand builds the equivalent `oci logging-search search-logs` command for
+// the current query and date range, so a search can be reproduced outside the
+// TUI. The pipeline is intentionally excluded: it is applied locally to the
+// results, not part of the OCI request.
+func (m Model) cliCommand(query string) string {
+	start := m.cliDate(m.from.Value(), false)
+	end := m.cliDate(m.to.Value(), true)
+	return fmt.Sprintf(
+		"oci logging-search search-logs --search-query %s --time-end %s --time-start %s --limit 100",
+		shellQuote(query), shellQuote(end), shellQuote(start),
+	)
+}
+
+// cliDate renders a from/to field as an RFC 3339 timestamp, falling back to the
+// raw input when it cannot be parsed.
+func (m Model) cliDate(value string, endOfDay bool) string {
+	if t, err := parseDate(value, endOfDay); err == nil {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return strings.TrimSpace(value)
+}
+
+// shellQuote wraps s in single quotes, escaping any embedded single quotes, so
+// it can be pasted into a POSIX shell verbatim.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // parseDate accepts the layouts in dateLayouts. When endOfDay is true, a
