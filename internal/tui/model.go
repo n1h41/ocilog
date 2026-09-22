@@ -36,9 +36,10 @@ type Model struct {
 	logs         logs.Model
 	search       search.Model
 
-	ready  bool
-	width  int
-	height int
+	ready    bool
+	width    int
+	height   int
+	showHelp bool
 }
 
 func New(client *oci.Client, tenancyID, initialCompartment string) *Model {
@@ -70,11 +71,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
+		if m.showHelp {
+			switch msg.String() {
+			case "?", "esc", "q", "ctrl+h":
+				m.showHelp = false
+			}
+			return m, nil
+		}
 		if m.filterEditing() {
 			return m, m.delegate(msg)
 		}
+		if msg.String() == "ctrl+h" {
+			m.showHelp = true
+			return m, nil
+		}
 		if m.tab != tabSearch {
 			switch msg.String() {
+			case "?":
+				m.showHelp = true
+				return m, nil
 			case "1":
 				m.tab = tabCompartments
 				return m, nil
@@ -231,13 +246,16 @@ func (m *Model) View() string {
 	if !m.ready {
 		return "loading..."
 	}
+	if m.showHelp {
+		return m.helpView()
+	}
 
 	status := label("compartment", m.session.CompartmentName) +
 		"  " + label("log group", m.session.LogGroupName) +
 		"  " + label("selected", fmt.Sprintf("%d", m.session.SelectedCount()))
 	status = ansi.Truncate(status, m.width-2, "…")
 
-	helpText := "1:compartments  2:log groups  3:logs  4:search  enter:open/search  enter(pipe):apply  space:select  s:search  esc:up  r:refresh  tab:next/field  ctrl+t/ctrl+left/right:pane  ctrl+x:expand  pgup/pgdn:scroll  home/end:top/bottom  ctrl+r:history  ctrl+y:copy pane  ctrl+o:copy query"
+	helpText := "?:help  1-4:tabs  s:search  r:refresh  ctrl+c:quit"
 	help := theme.Help.Render(ansi.Truncate(helpText, m.width-2, "…"))
 
 	return theme.App.Render(lipgloss.JoinVertical(lipgloss.Left,
